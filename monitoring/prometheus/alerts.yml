@@ -1,0 +1,107 @@
+groups:
+  - name: payment-platform-sre
+    rules:
+      - alert: HighApiErrorRate
+        expr: |
+          (
+            sum(
+              rate(
+                http_requests_total{
+                  status_code=~"5.."
+                }[2m]
+              )
+            )
+            /
+            clamp_min(
+              sum(
+                rate(
+                  http_requests_total[2m]
+                )
+              ),
+              0.001
+            )
+          ) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Payment API error rate above 5%"
+          description: |
+            More than 5% of HTTP requests are returning 5xx.
+      - alert: HighApiLatency
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (
+              rate(
+                http_request_duration_seconds_bucket[2m]
+              )
+            )
+          ) > 1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Payment API p95 latency above 1 second"
+      - alert: PaymentPendingBacklog
+        expr: |
+          payments_pending > 100
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Payment pending backlog is growing"
+          description: |
+            More than 100 payments are currently in PENDING state.
+      - alert: ClearingHouseHighLatency
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (
+              rate(
+                clearing_house_request_duration_seconds_bucket[2m]
+              )
+            )
+          ) > 2
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Clearing House p95 latency above 2 seconds"
+      - alert: ClearingHouseTimeouts
+        expr: |
+          increase(
+            clearing_house_timeouts_total[5m]
+          ) > 5
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Multiple Clearing House timeouts detected"
+      - alert: PaymentProcessingSLOBreach
+        expr: |
+          (
+            sum(
+              rate(
+                payment_processing_duration_seconds_bucket{
+                  le="5"
+                }[5m]
+              )
+            )
+            /
+            clamp_min(
+              sum(
+                rate(
+                  payment_processing_duration_seconds_count[5m]
+                )
+              ),
+              0.001
+            )
+          ) < 0.95
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Payment processing SLO breached"
+          description: |
+            Less than 95% of terminal payments complete within 5 seconds.
